@@ -1,6 +1,14 @@
 import React, { useRef, useEffect } from 'react';
 
-const Canvas = ({ template, textValues, canvasRef }) => {
+const Canvas = ({ 
+  template, 
+  textValues, 
+  canvasRef,
+  selectedColorScheme = 0,
+  selectedFontOption = 0, 
+  selectedSizeOption = 'medium',
+  selectedShapeOption = 0
+}) => {
   const previewRef = useRef(null);
 
   // Function to wrap text within given width
@@ -52,10 +60,16 @@ const Canvas = ({ template, textValues, canvasRef }) => {
     // Clear canvas
     ctx.clearRect(0, 0, size, size);
 
-    // Draw background
-    if (template.background.startsWith('linear-gradient')) {
+    // Get current customization options
+    const currentColorScheme = template.colorSchemes?.[selectedColorScheme] || { background: template.background, primary: '#ffffff', secondary: '#cccccc' };
+    const currentFontOption = template.fontOptions?.[selectedFontOption] || { main: 'Arial, sans-serif', secondary: 'Arial, sans-serif' };
+    const currentShapeOption = template.shapeOptions?.[selectedShapeOption] || { borderRadius: 0 };
+
+    // Draw background with selected color scheme
+    const backgroundStyle = currentColorScheme.background;
+    if (backgroundStyle.startsWith('linear-gradient')) {
       // Parse gradient
-      const gradientMatch = template.background.match(/linear-gradient\(([^)]+)\)/);
+      const gradientMatch = backgroundStyle.match(/linear-gradient\(([^)]+)\)/);
       if (gradientMatch) {
         const gradientParts = gradientMatch[1].split(',');
         const angle = gradientParts[0].trim();
@@ -84,24 +98,74 @@ const Canvas = ({ template, textValues, canvasRef }) => {
         ctx.fillStyle = gradient;
       }
     } else {
-      ctx.fillStyle = template.background;
+      ctx.fillStyle = backgroundStyle;
     }
     ctx.fillRect(0, 0, size, size);
 
     // Draw text areas
-    template.textAreas.forEach((textArea) => {
+    template.textAreas.forEach((textArea, index) => {
       const text = textValues[textArea.id] || textArea.placeholder;
       const scaledX = textArea.x * scale;
       const scaledY = textArea.y * scale;
       const scaledWidth = textArea.width * scale;
-      const scaledFontSize = textArea.fontSize * scale;
+      const scaledHeight = textArea.height * scale;
+      
+      // Get font size based on size option
+      const fontSize = typeof textArea.fontSize === 'object' 
+        ? textArea.fontSize[selectedSizeOption] 
+        : textArea.fontSize;
+      const scaledFontSize = fontSize * scale;
       const scaledLineHeight = scaledFontSize * (textArea.lineHeight || 1.2);
 
-      ctx.fillStyle = textArea.color;
-      ctx.font = `${textArea.fontWeight || 'normal'} ${scaledFontSize}px ${textArea.fontFamily}`;
+      // Get font family from current font option
+      let fontFamily;
+      if (textArea.fontFamily === 'main') {
+        fontFamily = currentFontOption.main;
+      } else if (textArea.fontFamily === 'secondary') {
+        fontFamily = currentFontOption.secondary;
+      } else if (textArea.fontFamily === 'tertiary') {
+        fontFamily = currentFontOption.tertiary || currentFontOption.secondary;
+      } else {
+        fontFamily = textArea.fontFamily || 'Arial, sans-serif';
+      }
+
+      // Get text color from color scheme
+      let textColor;
+      if (index === 0) {
+        textColor = currentColorScheme.primary;
+      } else if (index === 1) {
+        textColor = currentColorScheme.secondary;
+      } else {
+        textColor = currentColorScheme.primary;
+      }
+
+      // Draw background shape if allowShapes is true and shape is not rectangle
+      if (textArea.allowShapes && currentShapeOption.borderRadius > 0) {
+        const padding = 20 * scale;
+        ctx.save();
+        
+        // Create rounded rectangle background
+        const bgX = scaledX - padding;
+        const bgY = scaledY - padding;
+        const bgWidth = scaledWidth + (padding * 2);
+        const bgHeight = scaledHeight + (padding * 2);
+        const radius = currentShapeOption.borderRadius * scale;
+
+        ctx.beginPath();
+        ctx.roundRect(bgX, bgY, bgWidth, bgHeight, radius);
+        ctx.fillStyle = `${currentColorScheme.primary}20`; // 20% opacity
+        ctx.fill();
+        
+        ctx.restore();
+      }
+
+      // Set text properties
+      ctx.fillStyle = textColor;
+      ctx.font = `${textArea.fontWeight || 'normal'} ${scaledFontSize}px ${fontFamily}`;
       ctx.textAlign = textArea.textAlign || 'left';
       ctx.textBaseline = 'top';
 
+      // Draw text
       wrapText(ctx, text, scaledX, scaledY, scaledWidth, scaledLineHeight, textArea.textAlign);
     });
   };
@@ -114,7 +178,7 @@ const Canvas = ({ template, textValues, canvasRef }) => {
     if (canvasRef?.current) {
       drawCanvas(canvasRef.current, 1);
     }
-  }, [template, textValues]);
+  }, [template, textValues, selectedColorScheme, selectedFontOption, selectedSizeOption, selectedShapeOption]);
 
   if (!template) {
     return (
